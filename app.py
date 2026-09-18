@@ -1,9 +1,9 @@
 """Streamlit UI for the offensive language detection pipeline.
 
-Same design language as the earlier Gradio version (sage background, pine
-green for actions/results, burnt orange only on flagged content, IBM Plex
-for type) so the visual identity carries over even though the framework
-changed.
+Colors and base theme come from .streamlit/config.toml, which is the
+correct place for this -- it takes priority over OS/browser dark-mode
+detection. This file only adds the small accent touches the theme system
+doesn't cover: the colored left borders and the flagged-word highlight.
 """
 import os
 
@@ -13,10 +13,7 @@ from pipeline import run_pipeline
 
 WORK_DIR = "workdir"
 
-INK = "#14181C"
-BACKGROUND = "#F5F6F4"
 PRIMARY = "#2B5D50"
-PRIMARY_HOVER = "#204A3F"
 FLAGGED = "#C1440E"
 
 st.set_page_config(page_title="Offensive Language Detection", page_icon="🔇", layout="centered")
@@ -25,10 +22,6 @@ st.markdown(
     f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono&display=swap');
-    html, body, [class*="css"] {{ font-family: 'IBM Plex Sans', sans-serif; color: {INK}; }}
-    .stApp {{ background-color: {BACKGROUND}; }}
-    div.stButton > button:first-child {{ background-color: {PRIMARY}; color: white; border: none; }}
-    div.stButton > button:first-child:hover {{ background-color: {PRIMARY_HOVER}; color: white; }}
     .output-panel {{ border-left: 3px solid {PRIMARY}; padding-left: 16px; margin-top: 12px; }}
     .flagged-panel {{ border-left: 3px solid {FLAGGED}; padding-left: 16px; margin-top: 12px; }}
     .flagged-word {{ background-color: {FLAGGED}; color: white; padding: 1px 5px; border-radius: 3px; }}
