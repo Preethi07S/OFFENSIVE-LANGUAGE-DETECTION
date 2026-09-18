@@ -10,11 +10,12 @@ video.
 
 ## Status
 
-Core pipeline: done. Gradio UI and public deployment: in progress.
+Core pipeline: done. Streamlit UI: done. Public deployment: in progress.
 
 ## Project structure
 
 ```
+app.py                     # Streamlit UI
 pipeline/
   audio_extraction.py    # video -> audio (moviepy)
   transcription.py       # audio -> transcript + word timestamps (Whisper)
@@ -22,7 +23,7 @@ pipeline/
   censorship.py          # flagged words -> beeped audio -> merged video
   utils.py                # shared helpers
 requirements.txt
-packages.txt              # apt packages for Hugging Face Spaces (ffmpeg)
+packages.txt              # apt packages for Streamlit Community Cloud (ffmpeg)
 ```
 
 ## Setup
@@ -35,6 +36,14 @@ ffmpeg must also be installed on the system (`apt install ffmpeg` on
 Debian/Ubuntu, `brew install ffmpeg` on macOS).
 
 ## Usage
+
+Run the web UI locally:
+
+```bash
+streamlit run app.py
+```
+
+Or use the pipeline directly:
 
 ```python
 from pipeline import run_pipeline

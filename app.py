@@ -1,12 +1,13 @@
-"""Gradio UI for the offensive language detection pipeline.
+"""Streamlit UI for the offensive language detection pipeline.
 
-Design notes: a neutral sage/paper background with ink text, IBM Plex Sans
-for interface text and IBM Plex Mono for data (timestamps, flagged words) --
-a technical pairing that fits an audio-processing tool rather than a
-generic SaaS look. Color carries meaning, not decoration: deep pine for
-primary actions and results, burnt orange only on flagged content.
+Same design language as the earlier Gradio version (sage background, pine
+green for actions/results, burnt orange only on flagged content, IBM Plex
+for type) so the visual identity carries over even though the framework
+changed.
 """
-import gradio as gr
+import os
+
+import streamlit as st
 
 from pipeline import run_pipeline
 
@@ -14,36 +15,33 @@ WORK_DIR = "workdir"
 
 INK = "#14181C"
 BACKGROUND = "#F5F6F4"
-PANEL = "#FFFFFF"
-BORDER = "#DCDFDB"
 PRIMARY = "#2B5D50"
 PRIMARY_HOVER = "#204A3F"
 FLAGGED = "#C1440E"
 
-CUSTOM_CSS = f"""
-.gradio-container {{ max-width: 960px !important; margin: 0 auto !important; }}
-#header-block h1 {{ font-weight: 600; letter-spacing: -0.01em; margin-bottom: 4px; }}
-#header-block p {{ color: #4B5049; font-size: 15px; line-height: 1.5; max-width: 640px; }}
-.output-panel {{ border-left: 3px solid {PRIMARY} !important; padding-left: 16px !important; }}
-.flagged-panel {{ border-left: 3px solid {FLAGGED} !important; padding-left: 16px !important; margin-top: 8px; }}
-footer {{ visibility: hidden }}
-"""
+st.set_page_config(page_title="Offensive Language Detection", page_icon="🔇", layout="centered")
 
-theme = gr.themes.Base(
-    font=[gr.themes.GoogleFont("IBM Plex Sans"), "ui-sans-serif", "sans-serif"],
-    font_mono=[gr.themes.GoogleFont("IBM Plex Mono"), "ui-monospace", "monospace"],
-).set(
-    body_background_fill=BACKGROUND,
-    body_text_color=INK,
-    block_background_fill=PANEL,
-    block_border_color=BORDER,
-    block_label_text_color=INK,
-    block_title_text_color=INK,
-    button_primary_background_fill=PRIMARY,
-    button_primary_background_fill_hover=PRIMARY_HOVER,
-    button_primary_text_color="#FFFFFF",
-    input_background_fill=PANEL,
-    border_color_primary=BORDER,
+st.markdown(
+    f"""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono&display=swap');
+    html, body, [class*="css"] {{ font-family: 'IBM Plex Sans', sans-serif; color: {INK}; }}
+    .stApp {{ background-color: {BACKGROUND}; }}
+    div.stButton > button:first-child {{ background-color: {PRIMARY}; color: white; border: none; }}
+    div.stButton > button:first-child:hover {{ background-color: {PRIMARY_HOVER}; color: white; }}
+    .output-panel {{ border-left: 3px solid {PRIMARY}; padding-left: 16px; margin-top: 12px; }}
+    .flagged-panel {{ border-left: 3px solid {FLAGGED}; padding-left: 16px; margin-top: 12px; }}
+    .flagged-word {{ background-color: {FLAGGED}; color: white; padding: 1px 5px; border-radius: 3px; }}
+    [data-testid="stDataFrame"] {{ font-family: 'IBM Plex Mono', monospace; }}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.title("Offensive language detection")
+st.write(
+    "Upload a clip and it censors offensive speech automatically — flagged "
+    "words get beeped out, and you can see exactly what was caught and why."
 )
 
 
@@ -52,30 +50,27 @@ def _normalize(word: str) -> str:
     return word.strip().lower().strip(".,!?\"'")
 
 
-def _highlighted_tokens(text: str, toxic_words):
-    """Build (token, label) pairs for gr.HighlightedText, flagging toxic words."""
+def _highlighted_html(text: str, toxic_words) -> str:
+    """Render the transcript as HTML with flagged words wrapped in a highlight span."""
     toxic_set = set(toxic_words)
-    return [
-        (word + " ", "flagged" if _normalize(word) in toxic_set else None)
+    parts = [
+        f'<span class="flagged-word">{word}</span>' if _normalize(word) in toxic_set else word
         for word in text.split()
     ]
+    return " ".join(parts)
 
 
-def process_video(video_path):
-    if not video_path:
-        raise gr.Error("Upload a video first.")
+uploaded = st.file_uploader("Input video", type=["mp4", "mov", "mkv", "avi"])
+run_clicked = st.button("Censor video", type="primary", disabled=uploaded is None)
 
-    result = run_pipeline(video_path, work_dir=WORK_DIR)
+if run_clicked and uploaded is not None:
+    with st.spinner("Processing — can take a minute or two on CPU."):
+        os.makedirs(WORK_DIR, exist_ok=True)
+        input_path = os.path.join(WORK_DIR, f"input_{uploaded.name}")
+        with open(input_path, "wb") as f:
+            f.write(uploaded.getbuffer())
 
-    highlighted = _highlighted_tokens(result["transcript"], result["toxic_words"])
-
-    if result["toxic_timestamps"]:
-        rows = [
-            [_normalize(w["word"]), round(w["start_ms"] / 1000, 2), round(w["end_ms"] / 1000, 2)]
-            for w in result["toxic_timestamps"]
-        ]
-    else:
-        rows = [["—", "—", "—"]]
+        result = run_pipeline(input_path, work_dir=WORK_DIR)
 
     words_found = len(result["toxic_words"])
     status = (
@@ -84,40 +79,25 @@ def process_video(video_path):
         else "No offensive words detected in this clip."
     )
 
-    return result["censored_video_path"], highlighted, rows, status
+    st.markdown('<div class="output-panel">', unsafe_allow_html=True)
+    st.subheader("Censored output")
+    st.video(result["censored_video_path"])
+    st.caption(status)
+    st.markdown("</div>", unsafe_allow_html=True)
 
+    st.markdown('<div class="flagged-panel">', unsafe_allow_html=True)
+    st.subheader("Transcript")
+    st.markdown(_highlighted_html(result["transcript"], result["toxic_words"]), unsafe_allow_html=True)
 
-with gr.Blocks(title="Offensive Language Detection", theme=theme, css=CUSTOM_CSS) as demo:
-    gr.Markdown(
-        "# Offensive language detection\n"
-        "Upload a clip and it censors offensive speech automatically — flagged "
-        "words get beeped out, and you can see exactly what was caught and why.",
-        elem_id="header-block",
-    )
-
-    with gr.Row():
-        with gr.Column():
-            video_in = gr.Video(label="Input video")
-            run_btn = gr.Button("Censor video", variant="primary")
-        with gr.Column(elem_classes=["output-panel"]):
-            video_out = gr.Video(label="Censored output")
-            status = gr.Textbox(label="Status", interactive=False)
-
-    with gr.Column(elem_classes=["flagged-panel"]):
-        transcript_out = gr.HighlightedText(
-            label="Transcript",
-            color_map={"flagged": FLAGGED},
-        )
-        timestamps_out = gr.Dataframe(
-            headers=["Word", "Start (s)", "End (s)"],
-            label="Flagged words",
-        )
-
-    run_btn.click(
-        fn=process_video,
-        inputs=video_in,
-        outputs=[video_out, transcript_out, timestamps_out, status],
-    )
-
-if __name__ == "__main__":
-    demo.launch()
+    if result["toxic_timestamps"]:
+        st.subheader("Flagged words")
+        rows = [
+            {
+                "Word": _normalize(w["word"]),
+                "Start (s)": round(w["start_ms"] / 1000, 2),
+                "End (s)": round(w["end_ms"] / 1000, 2),
+            }
+            for w in result["toxic_timestamps"]
+        ]
+        st.dataframe(rows, use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
